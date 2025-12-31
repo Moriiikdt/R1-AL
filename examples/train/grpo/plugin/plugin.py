@@ -1146,113 +1146,100 @@ class MCQAnswerExactORM(ORM):
     整合型奖励函数：
     1. 计算 R_ans (Exact Match)。
     2. 如果 R_ans > 0 (答对了)，则调用 vLLM 计算 R_rev (Review Quality)。
-    3. 最终分数 = R_ans * (1.0 + alpha * R_rev)。
+    最终分数 = R_ans * (1.0 + alpha * R_rev)。
+    （不依赖时间戳 / time_interval）
     """
 
     def __init__(self, review_alpha: float = 0.5):
         self._ans_block_re = re.compile(r"<answer>(.*?)</answer>", re.IGNORECASE | re.DOTALL)
-        self.review_alpha = review_alpha  # 乘法系数，默认 0.5
-        
-        # 初始化 Review 打分器
+        self.review_alpha = review_alpha
+
         self.review_scorer = ReviewScorer(
-            base_url="http://127.0.0.1:8000/v1", # 根据你的实际配置修改
+            base_url="http://127.0.0.1:8000/v1",
             served_model="Qwen3-32B"
         )
 
-    # --- Answer Match 相关的辅助方法 ---
     def _extract_answer_block(self, text: str) -> Optional[str]:
-        if not text: return None
+        if not text:
+            return None
         m = self._ans_block_re.search(text)
         return m.group(1).strip() if m else None
 
     def _normalize(self, s: str) -> str:
         return re.sub(r"\s+", " ", s.strip()).lower()
-    
-    # --- 辅助方法：提取问题文本 (复用你原来的逻辑) ---
+
     @staticmethod
     def _concat_one_conversation(conv) -> Optional[str]:
-        # ... (此处复用你原来的代码: _concat_one_conversation) ...
-        if conv is None: return None
+        if conv is None:
+            return None
         try:
-            if isinstance(conv, str): return conv.strip() or None
+            if isinstance(conv, str):
+                return conv.strip() or None
             if isinstance(conv, list):
                 all_parts = []
                 for msg in conv:
                     if isinstance(msg, dict):
                         c = msg.get("content")
-                        if c: all_parts.append(str(c))
+                        if c:
+                            all_parts.append(str(c))
                     elif isinstance(msg, str):
                         all_parts.append(msg)
                 return "\n".join(all_parts).strip() or None
-        except: return None
+        except Exception:
+            return None
         return None
 
     def _get_question_text(self, messages, idx: int) -> str:
-        # ... (此处复用你原来的代码: _get_question_text) ...
-        # 简化版示例：
         if messages and isinstance(messages, list) and idx < len(messages):
-             raw = self._concat_one_conversation(messages[idx])
-             return raw.replace("<audio>", "").strip() if raw else "Unknown Question"
+            raw = self._concat_one_conversation(messages[idx])
+            return raw.replace("<audio>", "").strip() if raw else "Unknown Question"
         return "Unknown Question"
 
-    # --- Call ---
     def __call__(self, completions, solution, **kwargs) -> List[float]:
         rewards: List[float] = []
-        
-        # 获取 Batch 数据
+
         messages = kwargs.get("messages", [])
-        batch_time_intervals = kwargs.get("time_interval", [])
         batch_events = kwargs.get("event", [])
-        
+
         # 填充默认值防止越界
-        if not batch_time_intervals: batch_time_intervals = [[]] * len(completions)
-        if not batch_events: batch_events = [[]] * len(completions)
+        if not batch_events:
+            batch_events = [[]] * len(completions)
 
         for i, (pred_text, gt_ans_text) in enumerate(zip(completions, solution)):
             try:
-                # --- Step 1: 计算 R_ans (Answer Exact Match) ---
+                # --- Step 1: R_ans ---
                 r_ans = 0.0
                 pred_block = self._extract_answer_block(pred_text)
-                # gt_ans_text 本身就是答案，不需要再提取
-                
+
                 if pred_block and gt_ans_text:
                     if self._normalize(pred_block) == self._normalize(gt_ans_text):
                         r_ans = 1.0
-                
-                # --- Step 2: 计算 R_rev (仅当 R_ans > 0 时才计算，节省资源) ---
+
+                # --- Step 2: R_rev (only if correct) ---
                 r_rev = 0.0
                 if r_ans > 0.0:
-                    # 获取该样本的元数据
                     question = self._get_question_text(messages, i)
-                    t_intervals = batch_time_intervals[i] if i < len(batch_time_intervals) else []
                     events = batch_events[i] if i < len(batch_events) else []
-                    
-                    # 调用 ReviewScorer
-                    # 注意：full_cot_text 就是 pred_text
+
                     r_rev = self.review_scorer.calculate_review_score(
                         full_cot_text=str(pred_text),
                         question_text=question,
                         answer_text=gt_ans_text,
-                        gt_time_intervals=t_intervals,
                         gt_events=events
                     )
 
-                # --- Step 3: 组合公式 R = R_ans * (1 + alpha * R_rev) ---
-                # 如果答错：1.0 * 0.0 * (...) = 0.0
-                # 如果答对且没review：1.0 * (1 + 0.5 * 0) = 1.0
-                # 如果答对且review完美：1.0 * (1 + 0.5 * 1.0) = 1.5
-                
+                # --- Step 3: combine ---
                 final_score = r_ans * (1.0 + self.review_alpha * r_rev)
                 rewards.append(final_score)
 
-            except Exception as e:
-                # print(f"WeightedAnswerReviewORM Error: {e}")
+            except Exception:
                 rewards.append(0.0)
-        
+
         return rewards
 
 # 注册
 orms['answer_exact_match'] = MCQAnswerExactORM
+
 
 # R3 perception 感知奖励
 class PerceptionQualityJudgeORM(ORM):
@@ -1318,18 +1305,13 @@ class PerceptionQualityJudgeORM(ORM):
         return "Unknown"
 
     @staticmethod
-    def _build_caption(time_intervals: list, events: list) -> str:
-        """将时间戳和事件描述拼接成 Caption"""
-        if not time_intervals or not events or len(time_intervals) != len(events):
+    def _build_caption(events: list) -> str:
+        """将事件描述拼接成 Caption（不含时间戳）"""
+        if not events:
             return "No audio events detected."
-        
-        # 按照你的要求： "[{s}, {e}]: {ev}" 格式拼接
         try:
-            lines = []
-            for (s, e), ev in zip(time_intervals, events):
-                # 确保转成字符串时保留一定的精度，或者直接转str
-                lines.append(f"[{s}, {e}]: {ev}")
-            return " ".join(lines)
+            # 每条事件一行，保证可读性更强
+            return "\n".join(str(ev) for ev in events if ev is not None and str(ev).strip() != "")
         except Exception:
             return "Error parsing audio events."
 
@@ -1434,75 +1416,66 @@ class PerceptionQualityJudgeORM(ORM):
 
     # --- 主调用入口 ---
     def __call__(self, completions, solution, **kwargs) -> List[float]:
-        """
-        completions: 模型的预测输出 list[str]
-        solution: Ground Truth 列表 (即 Ref-CoT) list[str]
-        kwargs: 包含 messages, time_interval, event 等
-        """
-        rewards: List[float] = []
-        messages = kwargs.get("messages")
-        
-        # 从 kwargs 获取 batch 数据
-        # 注意：这里假设 kwargs 中的 value 都是与 completions 长度对齐的列表
-        batch_time_intervals = kwargs.get("time_interval", [])
-        batch_events = kwargs.get("event", [])
-        
-        # 安全性检查：如果没有传递这些列，设为空列表
-        if not batch_time_intervals: batch_time_intervals = [[]] * len(completions)
-        if not batch_events: batch_events = [[]] * len(completions)
+            """
+            completions: 模型的预测输出 list[str]
+            solution: Ground Truth 列表 (即 Ref-CoT) list[str]
+            kwargs: 包含 messages, event 等
+            """
+            rewards: List[float] = []
+            messages = kwargs.get("messages")
 
-        for i, (pred_text, ref_cot_text) in enumerate(zip(completions, solution)):
-            try:
-                # 1. 获取并清洗 Question
-                question_text = self._get_question_text(messages, i)
-                if question_text:
-                    # 去掉 <audio> 标记
-                    question_text = question_text.replace("<audio>", "").strip()
-                else:
+            # 只从 kwargs 获取 batch events
+            batch_events = kwargs.get("event", [])
+
+            # 安全性检查：如果没有传递 event 列，设为空列表并对齐 batch
+            if not batch_events:
+                batch_events = [[]] * len(completions)
+
+            for i, (pred_text, ref_cot_text) in enumerate(zip(completions, solution)):
+                try:
+                    # 1. 获取并清洗 Question
+                    question_text = self._get_question_text(messages, i)
+                    if question_text:
+                        question_text = question_text.replace("<audio>", "").strip()
+                    else:
+                        rewards.append(0.0)
+                        continue
+
+                    # 2. 获取 perception
+                    cot_text = (str(pred_text) if pred_text is not None else "").strip()
+                    if not cot_text:
+                        rewards.append(0.0)
+                        continue
+                    cot_perception = self._extract_perception_content(cot_text)
+
+                    # Correct Answer
+                    answer_text = ref_cot_text
+
+                    # 3. Audio Caption：只拼 events
+                    current_events = batch_events[i] if i < len(batch_events) else []
+                    caption_text = self._build_caption(current_events)
+
+                    # 4. 构建 Prompt
+                    prompt = self._build_prompt(
+                        caption_text=caption_text,
+                        question_text=question_text,
+                        answer_text=answer_text,
+                        cot_text=cot_perception
+                    )
+
+                    # 5. 调用打分模型
+                    judge_out = self._call_judge_once(prompt)
+                    if judge_out is None or judge_out.strip() == "":
+                        judge_out = self._call_judge_with_retry(prompt)
+
+                    # 6. 解析分数
+                    score = self._parse_score(judge_out)
+                    rewards.append(score if score is not None else 0.0)
+
+                except Exception:
                     rewards.append(0.0)
-                    continue
 
-                # 2. 获取 perception
-                cot_text = (str(pred_text) if pred_text is not None else "").strip()
-                if not cot_text:
-                    rewards.append(0.0)
-                    continue
-                cot_perception = self._extract_perception_content(cot_text)
-                
-                # Correct Answer 
-                answer_text = ref_cot_text
-                
-                # Audio Caption (拼接 time_interval 和 event)
-                current_time_intervals = batch_time_intervals[i] if i < len(batch_time_intervals) else []
-                current_events = batch_events[i] if i < len(batch_events) else []
-                caption_text = self._build_caption(current_time_intervals, current_events)
-
-                # 4. 构建 Prompt
-                prompt = self._build_prompt(
-                    caption_text=caption_text,
-                    question_text=question_text,
-                    answer_text=answer_text,
-                    cot_text=cot_perception
-                )
-
-                # 5. 调用打分模型
-                # judge_out = self._call_judge_with_retry(prompt)
-                
-                # 为了防止 retry 耗时过长，可以先调一次，如果返回空再走 retry (原逻辑保留)
-                # 这里直接复用你原有的逻辑
-                judge_out = self._call_judge_once(prompt)
-                if judge_out is None or judge_out.strip() == "":
-                    judge_out = self._call_judge_with_retry(prompt)
-
-                # 6. 解析分数
-                score = self._parse_score(judge_out)
-                rewards.append(score if score is not None else 0.0)
-
-            except Exception as e:
-                # 调试时可以 print(e)
-                rewards.append(0.0)
-
-        return rewards
+            return rewards
 
 # 注册
 orms['perception_judge_vllm'] = PerceptionQualityJudgeORM
@@ -1550,11 +1523,18 @@ class CoTQualityJudgeORM:
     @staticmethod
     def _extract_steps(reasoning_text: str) -> List[str]:
         """
-        解析 '1. Sub-question: ... Answer: ...' 格式的步骤。
+        解析多段:
+        Sub-question: ...
+            Answer: ...
+        不依赖编号。
         """
-        pattern = r"(\d+\.\s*Sub-question:.*?)(?=\n\d+\.\s*Sub-question:|$)"
-        matches = re.findall(pattern, reasoning_text, re.DOTALL | re.IGNORECASE)
-        return [m.strip() for m in matches if m.strip()]
+        if not reasoning_text:
+            return []
+
+        # 允许 Sub-question 前有空白/换行；一直匹配到下一个 Sub-question 或结尾
+        pattern = r"(Sub-question:\s*.*?)(?=\n\s*Sub-question:|\Z)"
+        matches = re.findall(pattern, reasoning_text, flags=re.DOTALL | re.IGNORECASE)
+        return [m.strip() for m in matches if m and m.strip()]
 
     # --- 核心：Prompt 构建 ---
 
@@ -1661,8 +1641,6 @@ class CoTQualityJudgeORM:
                         {"role": "user", "content": prompt},
                     ],
                     extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-                    temperature=0.1, 
-                    max_tokens=10 
                 )
                 if resp.choices:
                     content = resp.choices[0].message.content
@@ -1753,8 +1731,11 @@ class CoTQualityJudgeORM:
                 rewards.append(final_reward)
 
             except Exception as e:
-                # print(f"Error in reward calculation: {e}")
+                print(f"Error in reward calculation: {e}")
                 rewards.append(0.0)
+
+        # import pdb
+        # pdb.set_trace()
 
         return rewards
 
@@ -1798,19 +1779,13 @@ class ReviewScorer:
         return match.group(1).strip() if match else ""
 
     @staticmethod
-    def _build_caption(time_intervals: list, events: list) -> str:
-        if not time_intervals or not events or len(time_intervals) != len(events):
+    def _build_caption(events: list) -> str:
+        """将事件描述拼接成 Caption（不含时间戳）"""
+        if not events:
             return "No audio events detected."
         try:
-            lines = []
-            for t, ev in zip(time_intervals, events):
-                # 兼容 list 或 tuple 的时间戳
-                if isinstance(t, (list, tuple)) and len(t) >= 2:
-                    s, e = t[0], t[1]
-                else:
-                    s, e = 0.0, 0.0
-                lines.append(f"[{s}, {e}]: {ev}")
-            return " ".join(lines)
+            # 每条事件一行，保证可读性更强
+            return "\n".join(str(ev) for ev in events if ev is not None and str(ev).strip() != "")
         except Exception:
             return "Error parsing audio events."
 
@@ -1882,8 +1857,8 @@ class ReviewScorer:
         full_cot_text: str, 
         question_text: str, 
         answer_text: str, 
-        gt_time_intervals: list, 
-        gt_events: list
+        gt_events: list,
+        gt_time_intervals=None, 
     ) -> float:
         """
         计算单个样本的 Review 分数。
@@ -1900,7 +1875,7 @@ class ReviewScorer:
                 return 0.0
 
             # 2. 构建 GT Caption
-            gt_caption = self._build_caption(gt_time_intervals, gt_events)
+            gt_caption = self._build_caption(gt_events)
 
             # 3. 构建 Prompt
             prompt = self._build_prompt(
