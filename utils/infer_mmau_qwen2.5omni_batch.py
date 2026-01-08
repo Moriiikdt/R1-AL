@@ -1,23 +1,57 @@
 import os
 import json
 import torch
+import argparse
+import re
 from tqdm import tqdm
 import librosa  # noqa: F401
 
 from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 from qwen_omni_utils import process_mm_info
 
-# --- Configuration ---
-tag = "R1234"
 
-input_file = f'../bench/mmau-test-mini.json'
-output_file = f"./mmau_{tag}.jsonl"
+# ----------------------------
+# CLI
+# ----------------------------
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        required=True,
+        help="Path to checkpoint-XXXX-merged directory"
+    )
+    return parser.parse_args()
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-# Set your desired batch size here. This will now be used for inference.
-batch_size = 8  # For example, batch size of 8
+def build_tag_from_model_path(model_path: str, repetition_penalty: float = 1.04) -> str:
+    """
+    MMAU tag format:
+      checkpoint-4400-merged -> step_review_4K6-3e-sft-RL-4400_1.02
+    """
+    m = re.search(r"checkpoint-(\d+)-merged", model_path)
+    if m is None:
+        raise ValueError(f"Cannot parse checkpoint step from model_path: {model_path}")
+    step = m.group(1)
+    return f"step_review_4K6-3e-sft-RL-{step}_{repetition_penalty:.2f}"
 
+
+# ----------------------------
+# Configuration
+# ----------------------------
+args = parse_args()
+model_path = args.model_path
+
+# Keep this in sync with generate() so tag matches run setting
+REPETITION_PENALTY = 1.02
+tag = build_tag_from_model_path(model_path, repetition_penalty=REPETITION_PENALTY)
+
+input_file = "/ssd1/maxiangnan/mrx/Evidence/exp_test/data/MMAU.json"
+output_file = f"/ssd1/maxiangnan/mrx/Evidence/exp_test/utils/test/res/mmau/mmau_{tag}.jsonl"
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+batch_size = 8
 sys_prompt = "You are a helpful assistant."
 
 
@@ -55,8 +89,7 @@ def main():
     # ===== Load processed ids (for resume) =====
     processed_ids = load_processed_ids(output_file)
 
-    # RL完成的模型路径
-    model_path = "path"
+    # Step 1: Build your model
     model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
         model_path,
         torch_dtype="auto",
@@ -69,7 +102,7 @@ def main():
         contents = json.load(f)
 
     # Open the output file once and write to it in append mode
-    with open(output_file, 'a', encoding='utf-8') as f_out:
+    with open(output_file, "a", encoding="utf-8") as f_out:
         # Step 2: Iterate through the data in batches
         for i in tqdm(range(0, len(contents), batch_size), desc="Processing Batches"):
             raw_batch = contents[i:i + batch_size]
@@ -80,57 +113,56 @@ def main():
                 continue
 
             batch_conversations = []
-            batch_info = []  # To store original item data for saving later
+            batch_info = []
 
             # Step 3: Prepare all items in the batch
             for item in batch_data:
-                prompt = item['question'] + "Select one option from the provided choices.\n" + "\n".join(item['choices'])
+                prompt = item["question"] + "Select one option from the provided choices.\n" + "\n".join(item["choices"])
 
                 conversation = [
                     {
                         "role": "system",
-                        "content": [
-                            {"type": "text", "text": sys_prompt}
-                        ],
+                        "content": [{"type": "text", "text": sys_prompt}],
                     },
                     {
                         "role": "user",
                         "content": [
-                            {"type": "audio", "audio": item['audio_id']},
+                            {"type": "audio", "audio": item["audio_id"]},
                             {"type": "text", "text": prompt}
                         ]
                     }
                 ]
 
                 batch_conversations.append(conversation)
-                batch_info.append(item)  # Save the original item
+                batch_info.append(item)
 
-            # Step 4: Process the entire batch at once
             USE_AUDIO_IN_VIDEO = False
 
-            # Create a list of text prompts for the batch
-            texts = processor.apply_chat_template(batch_conversations, add_generation_prompt=True, tokenize=False)
+            texts = processor.apply_chat_template(
+                batch_conversations,
+                add_generation_prompt=True,
+                tokenize=False
+            )
 
-            # Process multimedia info for the batch.
-            audios, images, videos = process_mm_info(batch_conversations, use_audio_in_video=USE_AUDIO_IN_VIDEO)
+            audios, images, videos = process_mm_info(
+                batch_conversations,
+                use_audio_in_video=USE_AUDIO_IN_VIDEO
+            )
 
-            # The processor tokenizes the batch of texts and audio, padding them to the same length.
             inputs = processor(text=texts, audio=audios, return_tensors="pt", padding=True)
             inputs = inputs.to(model.device).to(model.dtype)
 
-            # Generate responses for the entire batch
             generate_ids = model.generate(
                 **inputs,
                 use_audio_in_video=USE_AUDIO_IN_VIDEO,
                 return_audio=False,
-                thinker_max_new_tokens=2048,  # v3
+                thinker_max_new_tokens=2048,
+                repetition_penalty=REPETITION_PENALTY
             )
 
-            # Remove the input tokens from the generated output
-            input_length = inputs['input_ids'].size(1)
+            input_length = inputs["input_ids"].size(1)
             generate_ids = generate_ids[:, input_length:]
 
-            # Decode the batch of responses
             responses = processor.batch_decode(
                 generate_ids,
                 skip_special_tokens=True,
@@ -143,24 +175,20 @@ def main():
 
                 result_entry = {
                     "model_output": model_response,
-                    "answer": original_item['answer'],
-                    "task": original_item['task'],
-                    "difficulty": original_item['difficulty'],
-                    "choices": original_item['choices'],
-                    "sub-category": original_item['sub-category'],
-                    # Retain original info
-                    "id": original_item['id'],
-                    "audio_id": original_item['audio_id'],
-                    "question": original_item['question'],
-                    "dataset": original_item['dataset'],
-                    "category": original_item['category'],
-                    "split": original_item['split']
+                    "answer": original_item["answer"],
+                    "task": original_item["task"],
+                    "difficulty": original_item["difficulty"],
+                    "choices": original_item["choices"],
+                    "sub-category": original_item["sub-category"],
+                    "id": original_item["id"],
+                    "audio_id": original_item["audio_id"],
+                    "question": original_item["question"],
+                    "dataset": original_item["dataset"],
+                    "category": original_item["category"],
+                    "split": original_item["split"],
                 }
 
-                # Write the result as a new line in the JSONL file
                 f_out.write(json.dumps(result_entry, ensure_ascii=False) + "\n")
-
-                # Update processed ids so we won't re-run within this execution
                 processed_ids.add(original_item["id"])
 
 
