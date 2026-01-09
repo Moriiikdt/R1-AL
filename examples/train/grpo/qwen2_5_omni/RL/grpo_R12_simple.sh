@@ -3,7 +3,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 \
 swift rlhf \
     --rlhf_type grpo \
     --model /mnt/hdfs/if_au/data/avqa_reason/checkpoint-948-merged \
-    --reward_funcs evidence_driven_format answer_exact_match \
+    --reward_funcs evidence_driven_format answer_exact_match_simple  \
     --reward_weights 0.1 1.5 \
     --train_type lora \
     --lora_rank 32 \
@@ -25,7 +25,7 @@ swift rlhf \
     --save_total_limit 100 \
     --logging_steps 5 \
     --max_length 2048 \
-    --output_dir output_step_reason_4K6_R12 \
+    --output_dir output_step_reason_4K6_R12simple \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 4 \
     --dataset_num_proc 4 \
