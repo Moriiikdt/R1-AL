@@ -1240,6 +1240,47 @@ class MCQAnswerExactORM(ORM):
 # 注册
 orms['answer_exact_match'] = MCQAnswerExactORM
 
+# R2_v2 不带review的
+class MCQAnswerExactORM(ORM):
+    """
+    仅答案验证奖励函数：
+    1. 计算 R_ans (Exact Match)。
+    最终分数 = R_ans
+    """
+
+    def __init__(self):
+        self._ans_block_re = re.compile(r"<answer>(.*?)</answer>", re.IGNORECASE | re.DOTALL)
+
+    def _extract_answer_block(self, text: str) -> Optional[str]:
+        if not text:
+            return None
+        m = self._ans_block_re.search(text)
+        return m.group(1).strip() if m else None
+
+    def _normalize(self, s: str) -> str:
+        return re.sub(r"\s+", " ", s.strip()).lower()
+
+    def __call__(self, completions, solution, **kwargs) -> List[float]:
+        rewards: List[float] = []
+
+        for pred_text, gt_ans_text in zip(completions, solution):
+            try:
+                r_ans = 0.0
+                pred_block = self._extract_answer_block(pred_text)
+
+                if pred_block and gt_ans_text:
+                    if self._normalize(pred_block) == self._normalize(gt_ans_text):
+                        r_ans = 1.0
+
+                rewards.append(r_ans)
+            except Exception:
+                rewards.append(0.0)
+
+        return rewards
+
+# 注册
+orms['answer_exact_match_simple'] = MCQAnswerExactORM()
+
 
 # R3 perception 感知奖励
 class PerceptionQualityJudgeORM(ORM):
