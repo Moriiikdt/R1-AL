@@ -1,5 +1,5 @@
 NPROC_PER_NODE=4 \
-CUDA_VISIBLE_DEVICES=0,1,2,3 \
+CUDA_VISIBLE_DEVICES=4,5,6,7 \
 swift rlhf \
     --rlhf_type grpo \
     --model /mnt/hdfs/if_au/data/avqa_reason/checkpoint-948-merged \
