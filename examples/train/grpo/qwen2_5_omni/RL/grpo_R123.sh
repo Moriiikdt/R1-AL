@@ -15,17 +15,17 @@ swift rlhf \
     --external_plugins "/opt/tiger/hqz_debug/mrx/R1-AL/examples/train/grpo/plugin/plugin.py" \
     --max_completion_length 2048 \
     --num_train_epochs 1 \
-    --max_steps 5000 \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 8 \
+    --max_steps 3000 \
+    --per_device_train_batch_size 16 \
+    --per_device_eval_batch_size 16 \
     --learning_rate 1e-5 \
     --gradient_accumulation_steps 1 \
-    --eval_steps 50 \
-    --save_steps 50 \
-    --save_total_limit 100 \
+    --eval_steps 100 \
+    --save_steps 100 \
+    --save_total_limit 20 \
     --logging_steps 5 \
     --max_length 2048 \
-    --output_dir output_step_reason_4K6_R123 \
+    --output_dir /mnt/hdfs/if_au/data/avqa_reason/RL_46544/output_step_reason_4K6_R123 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 4 \
     --dataset_num_proc 4 \

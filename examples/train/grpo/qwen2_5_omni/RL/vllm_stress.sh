@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 URL="http://127.0.0.1:8000/v1/completions"
-INTERVAL=0.1   # 0.1 秒
+INTERVAL=0.01   # 0.1 秒
 LOG_DIR="./vllm_log"
 mkdir -p "$LOG_DIR"
 
@@ -16,8 +16,8 @@ while true; do
     -H "Authorization: Bearer EMPTY" \
     -d '{
       "model": "Qwen3-32B",
-      "prompt": "什么是强化学习？",
-      "max_tokens": 128,
+      "prompt": "什么是强化学习？请详细描述",
+      "max_tokens": 256,
       "temperature": 0.7
     }' \
     >> "$LOG_DIR/resp.log" 2>> "$LOG_DIR/error.log"
