@@ -10,6 +10,22 @@ from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcess
 from qwen_omni_utils import process_mm_info
 
 # ----------------------------
+# Configuration
+# ----------------------------
+args = parse_args()
+model_path = args.model_path
+tag = build_tag_from_model_path(model_path)
+
+input_file = "./data/MMAR.json"
+output_file = f"./mmar_{tag}.jsonl"
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+batch_size = 16
+sys_prompt = "You are a helpful assistant."
+
+
+# ----------------------------
 # Command line arguments
 # ----------------------------
 def parse_args():
@@ -36,22 +52,6 @@ def build_tag_from_model_path(model_path: str) -> str:
     step = match.group(1)
     tag = f"step_review_4K6-3e-sft-RL-{step}_1.03"
     return tag
-
-
-# ----------------------------
-# Configuration
-# ----------------------------
-args = parse_args()
-model_path = args.model_path
-tag = build_tag_from_model_path(model_path)
-
-input_file = "/ssd1/maxiangnan/mrx/Evidence/exp_test/data/MMAR.json"
-output_file = f"/ssd1/maxiangnan/mrx/Evidence/exp_test/utils/test/res/mmar/mmar_{tag}.jsonl"
-
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
-batch_size = 8
-sys_prompt = "You are a helpful assistant."
 
 
 def main():

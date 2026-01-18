@@ -1279,7 +1279,7 @@ class MCQAnswerExactORM(ORM):
         return rewards
 
 # 注册
-orms['answer_exact_match_simple'] = MCQAnswerExactORM()
+orms['answer_exact_match_simple'] = MCQAnswerExactORM
 
 
 # R3 perception 感知奖励

@@ -9,6 +9,24 @@ import librosa  # noqa: F401
 from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 from qwen_omni_utils import process_mm_info
 
+# ----------------------------
+# Configuration
+# ----------------------------
+args = parse_args()
+model_path = args.model_path
+
+# Keep this in sync with generate() so tag matches run setting
+REPETITION_PENALTY = 1.02
+tag = build_tag_from_model_path(model_path, repetition_penalty=REPETITION_PENALTY)
+
+input_file = "./data/MMAU_new.json"
+output_file = f"./mmau_new_{tag}.jsonl"
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+batch_size = 16
+sys_prompt = "You are a helpful assistant."
+
 
 # ----------------------------
 # CLI
@@ -34,25 +52,6 @@ def build_tag_from_model_path(model_path: str, repetition_penalty: float = 1.04)
         raise ValueError(f"Cannot parse checkpoint step from model_path: {model_path}")
     step = m.group(1)
     return f"step_review_4K6-3e-sft-RL-{step}_{repetition_penalty:.2f}"
-
-
-# ----------------------------
-# Configuration
-# ----------------------------
-args = parse_args()
-model_path = args.model_path
-
-# Keep this in sync with generate() so tag matches run setting
-REPETITION_PENALTY = 1.02
-tag = build_tag_from_model_path(model_path, repetition_penalty=REPETITION_PENALTY)
-
-input_file = "/ssd1/maxiangnan/mrx/Evidence/exp_test/data/MMAU.json"
-output_file = f"/ssd1/maxiangnan/mrx/Evidence/exp_test/utils/test/res/mmau/mmau_{tag}.jsonl"
-
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
-batch_size = 8
-sys_prompt = "You are a helpful assistant."
 
 
 def load_processed_ids(output_path: str) -> set:
