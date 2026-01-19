@@ -22,7 +22,12 @@ JSONL_SUFFIX="_1.02.jsonl"
 LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_mmau_old"
 mkdir -p "${LOG_DIR}"
 
+# ★ 新增：统一 merged 输出根目录
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/merged"
+mkdir -p "${MERGED_ROOT}"
+
 echo "RESULT_TXT: ${RESULT_TXT}"
+echo "MERGED_ROOT: ${MERGED_ROOT}"
 echo "Start..."
 
 run_one_dir () {
@@ -67,9 +72,13 @@ run_one_dir () {
   for ckpt in "${CKPTS[@]}"; do
     step="${ckpt#checkpoint-}"
     lora_dir="${BASE_DIR}/${ckpt}"
-    merged_dir="${BASE_DIR}/${ckpt}-merged"
 
-    # ===== 关键修复：jsonl 名字必须带实验前缀，避免多进程覆盖同名文件 =====
+    # ★ 改动1：merged_dir 统一放 MERGED_ROOT
+    merged_dir="${MERGED_ROOT}/checkpoint_${run_tag}_${step}"
+    # （可选，推荐更稳）如果担心不同 v0/v1 step 一样会冲突，用这一行替换上面那行：
+    # merged_dir="${MERGED_ROOT}/checkpoint_${run_tag}_${version_tag}_${step}"
+
+    # ===== jsonl 名字必须带实验前缀，避免多进程覆盖同名文件 =====
     safe_prefix="${exp_prefix//\//_}"
     jsonl_file="${OUTPUT_JSONL}/${safe_prefix}_${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
 
@@ -81,23 +90,27 @@ run_one_dir () {
     echo "[MERG] ${merged_dir}"
     echo "[JSON] ${jsonl_file}"
 
+    # ---------- 1) 合并 LoRA ----------
     if [[ -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] 已存在 merged 目录，跳过 merge"
+      echo "[STEP ${step}] 已存在 merged 目录（${merged_dir}），跳过 merge"
     else
-      echo "[STEP ${step}] 开始 merge LoRA..."
-      (
-        cd "${BASE_DIR}"
-        ${SWIFT_CMD} export \
-          --adapters "${lora_dir}" \
-          --merge_lora true
-      )
+      echo "[STEP ${step}] 开始 merge LoRA -> ${merged_dir} ..."
+      mkdir -p "${merged_dir}"
+
+      # ★ 改动2：用 --output_dir 指定导出目录
+      ${SWIFT_CMD} export \
+        --adapters "${lora_dir}" \
+        --merge_lora true \
+        --output_dir "${merged_dir}"
     fi
 
-    if [[ ! -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] ERROR: merge 失败，未找到 ${merged_dir}"
+    # 校验：目录存在且非空
+    if [[ ! -d "${merged_dir}" ]] || [[ -z "$(ls -A "${merged_dir}" 2>/dev/null)" ]]; then
+      echo "[STEP ${step}] ERROR: merge 失败或输出为空：${merged_dir}"
       exit 1
     fi
 
+    # ---------- 2) 推理 ----------
     echo "[STEP ${step}] 开始推理..."
     ${INFER_PY} --model_path "${merged_dir}" --output "${jsonl_file}"
 
@@ -106,10 +119,11 @@ run_one_dir () {
       exit 1
     fi
 
+    # ---------- 3) 评测 ----------
     echo "[STEP ${step}] 开始评测..."
     eval_out="$(${EVAL_PY} --input "${jsonl_file}")"
 
-    # 并发追加写结果：加锁，避免多进程写乱
+    # ---------- 4) 并发追加写结果：加锁 ----------
     echo "[STEP ${step}] 写入 ${RESULT_TXT}（追加，带锁）..."
     {
       flock -w 600 200
@@ -118,6 +132,7 @@ run_one_dir () {
       done <<< "${eval_out}"
     } 200>>"${RESULT_TXT}"
 
+    # ---------- 5) 清理 merged 目录 ----------
     echo "[STEP ${step}] 删除 merged 目录: ${merged_dir}"
     rm -rf "${merged_dir}"
 

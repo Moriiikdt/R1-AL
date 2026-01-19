@@ -22,10 +22,15 @@ SWIFT_CMD="swift"
 JSONL_PREFIX="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX="_1.02.jsonl"
 
+# ★ 新增：统一 merged 输出根目录
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/merged"
+mkdir -p "${MERGED_ROOT}"
+
 LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_mmau_new"
 mkdir -p "${LOG_DIR}"
 
 echo "RESULT_TXT: ${RESULT_TXT}"
+echo "MERGED_ROOT: ${MERGED_ROOT}"
 echo "Start..."
 
 # ====== 每个 BASE_DIR 的工作函数（复用你原来的逻辑）======
@@ -72,7 +77,13 @@ run_one_dir () {
   for ckpt in "${CKPTS[@]}"; do
     step="${ckpt#checkpoint-}"
     lora_dir="${BASE_DIR}/${ckpt}"
-    merged_dir="${BASE_DIR}/${ckpt}-merged"
+
+    # ★ 改动1：merged_dir 不再放 BASE_DIR 下，统一放 MERGED_ROOT
+    #    命名：checkpoint + run_tag + step
+    merged_dir="${MERGED_ROOT}/checkpoint_${run_tag}_${step}"
+
+    # （可选）如果你希望不同 v0/v1 也区分开，改成下面这一行：
+    # merged_dir="${MERGED_ROOT}/checkpoint_${run_tag}_${version_tag}_${step}"
 
     safe_prefix="${exp_prefix//\//_}"
     jsonl_file="${OUTPUT_JSONL}/${safe_prefix}_${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
@@ -87,19 +98,21 @@ run_one_dir () {
 
     # ---------- 1) 合并 LoRA ----------
     if [[ -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] 已存在 merged 目录，跳过 merge"
+      echo "[STEP ${step}] 已存在 merged 目录（${merged_dir}），跳过 merge"
     else
-      echo "[STEP ${step}] 开始 merge LoRA..."
-      (
-        cd "${BASE_DIR}"
-        ${SWIFT_CMD} export \
-          --adapters "${lora_dir}" \
-          --merge_lora true
-      )
+      echo "[STEP ${step}] 开始 merge LoRA -> ${merged_dir} ..."
+      mkdir -p "${merged_dir}"
+
+      # ★ 改动2：用 --output_dir 指定导出目录到 merged_dir
+      ${SWIFT_CMD} export \
+        --adapters "${lora_dir}" \
+        --merge_lora true \
+        --output_dir "${merged_dir}"
     fi
 
-    if [[ ! -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] ERROR: merge 失败，未找到 ${merged_dir}"
+    # 简单校验：目录存在且非空
+    if [[ ! -d "${merged_dir}" ]] || [[ -z "$(ls -A "${merged_dir}" 2>/dev/null)" ]]; then
+      echo "[STEP ${step}] ERROR: merge 失败或输出为空：${merged_dir}"
       exit 1
     fi
 

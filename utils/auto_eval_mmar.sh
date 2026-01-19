@@ -10,17 +10,20 @@ BASE_DIRS=(
 )
 
 OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/result"
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/merged"        
+mkdir -p "${MERGED_ROOT}"
+
 INFER_PY="python infer_mmar_batch.py"
 EVAL_PY="python ./eval/mmar_eval_CoT.py"
 RESULT_TXT="/mnt/hdfs/if_au/saves/mrx/result/result_mmar.txt"
 SWIFT_CMD="swift"
+
 JSONL_PREFIX="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX="_1.03.jsonl"
 
 LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs"
 mkdir -p "${LOG_DIR}"
 
-# ====== 每个 BASE_DIR 的工作函数（完全复用你原来的逻辑）======
 run_one_dir () {
   local BASE_DIR="$1"
   local GPU_ID="$2"
@@ -62,7 +65,11 @@ run_one_dir () {
   for ckpt in "${CKPTS[@]}"; do
     step="${ckpt#checkpoint-}"
     lora_dir="${BASE_DIR}/${ckpt}"
-    merged_dir="${BASE_DIR}/${ckpt}-merged"
+
+    # ★ 新命名：checkpoint + run_tag + step
+    #   例：/mnt/.../merged/checkpoint_R1234_8000
+    merged_dir="${MERGED_ROOT}/checkpoint_${run_tag}_${step}"
+
     safe_prefix="${exp_prefix//\//_}"
     jsonl_file="${OUTPUT_JSONL}/${safe_prefix}_${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
 
@@ -75,17 +82,22 @@ run_one_dir () {
     echo "[JSON] ${jsonl_file}"
 
     if [[ -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] merged 已存在，跳过 merge"
+      echo "[STEP ${step}] merged 已存在（${merged_dir}），跳过 merge"
     else
-      echo "[STEP ${step}] 开始 merge LoRA..."
-      (
-        cd "${BASE_DIR}"
-        ${SWIFT_CMD} export --adapters "${lora_dir}" --merge_lora true
-      )
+      echo "[STEP ${step}] 开始 merge LoRA -> ${merged_dir} ..."
+      mkdir -p "${merged_dir}"
+
+      # ★ 关键改动：用 --output_dir 指定导出目录
+      # 注意：不再依赖 BASE_DIR 里自动生成的 checkpoint-xxx-merged
+      ${SWIFT_CMD} export \
+        --adapters "${lora_dir}" \
+        --merge_lora true \
+        --output_dir "${merged_dir}"
     fi
 
-    if [[ ! -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] ERROR: merge 失败，未找到 ${merged_dir}"
+    # 简单校验（至少得有东西）
+    if [[ ! -d "${merged_dir}" ]] || [[ -z "$(ls -A "${merged_dir}" 2>/dev/null)" ]]; then
+      echo "[STEP ${step}] ERROR: merge 失败或输出为空：${merged_dir}"
       exit 1
     fi
 
@@ -100,7 +112,6 @@ run_one_dir () {
     echo "[STEP ${step}] 开始评测..."
     eval_out="$(${EVAL_PY} --input "${jsonl_file}")"
 
-    # 关键点：并发追加写 RESULT_TXT 时加锁，避免多进程互相打乱行
     echo "[STEP ${step}] 写入 ${RESULT_TXT}（追加，带锁）..."
     {
       flock -w 600 200
@@ -109,6 +120,7 @@ run_one_dir () {
       done <<< "${eval_out}"
     } 200>>"${RESULT_TXT}"
 
+    # ★ 清理：删 merged_root 下的 merged_dir
     echo "[STEP ${step}] 删除 merged 目录: ${merged_dir}"
     rm -rf "${merged_dir}"
 
@@ -117,21 +129,19 @@ run_one_dir () {
 }
 
 echo "RESULT_TXT: ${RESULT_TXT}"
+echo "MERGED_ROOT: ${MERGED_ROOT}"
 echo "Start..."
 
-# ====== 并行：一张卡一个目录 ======
 pids=()
 for i in "${!BASE_DIRS[@]}"; do
   dir="${BASE_DIRS[$i]}"
   gpu="${i}"   # 0..4
   log="${LOG_DIR}/gpu${gpu}.log"
-  # 每个目录一个后台进程，并记录日志
   run_one_dir "${dir}" "${gpu}" > "${log}" 2>&1 &
   pids+=("$!")
   echo "Launched GPU ${gpu} for ${dir} (pid=${pids[-1]}), log=${log}"
 done
 
-# 等待全部结束
 fail=0
 for pid in "${pids[@]}"; do
   if ! wait "${pid}"; then
