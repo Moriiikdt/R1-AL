@@ -10,7 +10,7 @@ BASE_DIRS=(
 )
 
 OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/result"
-MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/merged"        
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergeds"        
 mkdir -p "${MERGED_ROOT}"
 
 INFER_PY="python infer_mmar_batch.py"
@@ -83,9 +83,6 @@ run_one_dir () {
 
     if [[ -d "${merged_dir}" ]]; then
       echo "[STEP ${step}] merged 已存在（${merged_dir}），跳过 merge"
-    else
-      echo "[STEP ${step}] 开始 merge LoRA -> ${merged_dir} ..."
-      mkdir -p "${merged_dir}"
 
       # ★ 关键改动：用 --output_dir 指定导出目录
       # 注意：不再依赖 BASE_DIR 里自动生成的 checkpoint-xxx-merged

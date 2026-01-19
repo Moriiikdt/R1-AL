@@ -23,7 +23,7 @@ LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_mmau_old"
 mkdir -p "${LOG_DIR}"
 
 # ★ 新增：统一 merged 输出根目录
-MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/merged"
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergeds"
 mkdir -p "${MERGED_ROOT}"
 
 echo "RESULT_TXT: ${RESULT_TXT}"
@@ -93,9 +93,6 @@ run_one_dir () {
     # ---------- 1) 合并 LoRA ----------
     if [[ -d "${merged_dir}" ]]; then
       echo "[STEP ${step}] 已存在 merged 目录（${merged_dir}），跳过 merge"
-    else
-      echo "[STEP ${step}] 开始 merge LoRA -> ${merged_dir} ..."
-      mkdir -p "${merged_dir}"
 
       # ★ 改动2：用 --output_dir 指定导出目录
       ${SWIFT_CMD} export \
