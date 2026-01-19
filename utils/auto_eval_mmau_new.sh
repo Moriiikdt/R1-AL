@@ -23,7 +23,7 @@ JSONL_PREFIX="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX="_1.02.jsonl"
 
 # ★ 新增：统一 merged 输出根目录
-MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergedss"
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergedsss"
 mkdir -p "${MERGED_ROOT}"
 
 LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_mmau_new"

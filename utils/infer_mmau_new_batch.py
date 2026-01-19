@@ -32,14 +32,38 @@ def parse_args():
 
 def build_tag_from_model_path(model_path: str, repetition_penalty: float = 1.04) -> str:
     """
-    MMAU tag format:
+    Tag format:
       checkpoint-4400-merged -> step_review_4K6-3e-sft-RL-4400_1.02
+      checkpoint_R1234_v2_3100 -> step_review_4K6-3e-sft-RL-3100_1.02
+      .../checkpoint-3100 -> step_review_4K6-3e-sft-RL-3100_1.02
     """
-    m = re.search(r"checkpoint-(\d+)-merged", model_path)
-    if m is None:
+    base = os.path.basename(os.path.normpath(model_path))
+
+    patterns = [
+        r"checkpoint-(\d+)-merged",          # checkpoint-3100-merged
+        r"checkpoint-(\d+)$",                # checkpoint-3100
+        r"checkpoint_(\d+)$",                # checkpoint_3100
+        r"checkpoint_[A-Za-z0-9_]+_(\d+)$",  # checkpoint_R1234_v2_3100
+    ]
+
+    step = None
+    for pat in patterns:
+        m = re.search(pat, model_path) or re.search(pat, base)
+        if m:
+            step = m.group(1)
+            break
+
+    if step is None:
+        # last resort: use the last number that appears in the path
+        nums = re.findall(r"(\d+)", model_path)
+        if nums:
+            step = nums[-1]
+
+    if step is None:
         raise ValueError(f"Cannot parse checkpoint step from model_path: {model_path}")
-    step = m.group(1)
+
     return f"step_review_4K6-3e-sft-RL-{step}_{repetition_penalty:.2f}"
+
 
 
 def load_processed_ids(output_path: str) -> set:

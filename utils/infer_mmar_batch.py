@@ -34,17 +34,43 @@ def parse_args():
 
 def build_tag_from_model_path(model_path: str) -> str:
     """
-    Extract step number from checkpoint-XXXX-merged
-    and build tag string.
+    Extract step number from model_path and build tag string.
+
+    Supported patterns:
+      - .../checkpoint-XXXX-merged
+      - .../checkpoint-XXXX
+      - .../checkpoint_XXXX
+      - .../checkpoint_<anything>_XXXX   (e.g., checkpoint_R1234_v2_3100)
+      - fallback: last number in the path
     """
-    match = re.search(r"checkpoint-(\d+)-merged", model_path)
-    if match is None:
-        raise ValueError(
-            f"Cannot parse checkpoint step from model_path: {model_path}"
-        )
-    step = match.group(1)
+    base = os.path.basename(os.path.normpath(model_path))
+
+    patterns = [
+        r"checkpoint-(\d+)-merged",          # checkpoint-3100-merged
+        r"checkpoint-(\d+)$",                # checkpoint-3100
+        r"checkpoint_(\d+)$",                # checkpoint_3100
+        r"checkpoint_[A-Za-z0-9_]+_(\d+)$",  # checkpoint_R1234_v2_3100
+    ]
+
+    step = None
+    for pat in patterns:
+        m = re.search(pat, model_path) or re.search(pat, base)
+        if m:
+            step = m.group(1)
+            break
+
+    if step is None:
+        # last-resort: pick the last number in the whole path
+        m = re.findall(r"(\d+)", model_path)
+        if m:
+            step = m[-1]
+
+    if step is None:
+        raise ValueError(f"Cannot parse checkpoint step from model_path: {model_path}")
+
     tag = f"step_review_4K6-3e-sft-RL-{step}_1.03"
     return tag
+
 
 
 # ----------------------------
