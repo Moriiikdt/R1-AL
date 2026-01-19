@@ -10,7 +10,7 @@ BASE_DIRS=(
 )
 
 OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/result"
-MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergeds"        
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergedss"        
 mkdir -p "${MERGED_ROOT}"
 
 INFER_PY="python infer_mmar_batch.py"

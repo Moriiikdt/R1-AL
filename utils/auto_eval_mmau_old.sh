@@ -23,7 +23,7 @@ LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_mmau_old"
 mkdir -p "${LOG_DIR}"
 
 # ★ 新增：统一 merged 输出根目录
-MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergeds"
+MERGED_ROOT="/mnt/hdfs/if_au/saves/mrx/mergedss"
 mkdir -p "${MERGED_ROOT}"
 
 echo "RESULT_TXT: ${RESULT_TXT}"

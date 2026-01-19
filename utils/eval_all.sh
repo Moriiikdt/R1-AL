@@ -1,4 +1,4 @@
-mkdir -p /mnt/hdfs/if_au/saves/mrx/mergeds
+mkdir -p /mnt/hdfs/if_au/saves/mrx/mergedss
 
 echo "MMAR"
 bash auto_eval_mmar.sh
