@@ -11,13 +11,15 @@ BASE_DIRS=(
   "/mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R12_simple/v7-20260115-024725"
 )
 
+OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/result"
+
 # ================== 通用配置 ==================
 # 推理脚本 & 评测脚本（按你的实际路径修改）
 INFER_PY="python infer_mmar_batch.py"
 EVAL_PY="./eval/mmar_eval_CoT.py"
 
 # 评测结果统一追加到这个文件（不会覆盖）
-RESULT_TXT="./result_mmar.txt"
+RESULT_TXT="/mnt/hdfs/if_au/saves/mrx/result/result_mmar.txt"
 
 # swift 命令（如果 swift 不在 PATH，请写绝对路径）
 SWIFT_CMD="swift"
@@ -66,7 +68,8 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
     find "${BASE_DIR}" -maxdepth 1 -type d -name "checkpoint-[0-9]*" -printf "%f\n" \
     | sed -E 's/^checkpoint-([0-9]+)$/\1 checkpoint-\1/' \
     | sort -n -k1,1 \
-    | awk '{print $2}'
+    | awk '{print $2}' \
+    | tail -n 5
   )
 
   # 如果当前 BASE_DIR 下没有 checkpoint，就跳过
@@ -87,7 +90,8 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
     merged_dir="${BASE_DIR}/${ckpt}-merged"
 
     # 推理输出的 jsonl 文件名
-    jsonl_file="${BASE_DIR}/${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
+    safe_prefix="${exp_prefix//\//_}"   # 把 R1234/v0 里的 / 替换成 _
+    jsonl_file="${OUTPUT_JSONL}/${safe_prefix}_${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
 
     echo "============================================================"
     echo "[EXP ] ${exp_prefix}"
@@ -120,7 +124,7 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
     # ---------- 2) 推理 ----------
     # 使用合并后的模型做推理，生成 jsonl
     echo "[STEP ${step}] 开始推理..."
-    ${INFER_PY} --model_path "${merged_dir}"
+    ${INFER_PY} --model_path "${merged_dir}" --output "${jsonl_file}"
 
     # 检查推理输出是否存在
     if [[ ! -f "${jsonl_file}" ]]; then

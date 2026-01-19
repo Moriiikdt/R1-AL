@@ -11,19 +11,21 @@ BASE_DIRS=(
   "/mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R12_simple/v7-20260115-024725"
 )
 
+OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/result"
+
 # ================== 通用配置 ==================
 # 推理脚本 & 评测脚本（按你的实际路径修改）
 INFER_PY="python infer_mmau_old_batch.py"
 EVAL_PY="./eval/mmau_eval_CoT.py"
 
 # 评测结果统一追加到这个文件（不会覆盖）
-RESULT_TXT="./result_mmau_old.txt"
+RESULT_TXT="/mnt/hdfs/if_au/saves/mrx/result/result_mmau_old.txt"
 
 # swift 命令（如果 swift 不在 PATH，请写绝对路径）
 SWIFT_CMD="swift"
 
 # infer 脚本生成的 jsonl 文件命名规则
-JSONL_PREFIX="mmau_old_step_review_4K6-3e-sft-RL-"
+JSONL_PREFIX="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX="_1.02.jsonl"
 
 echo "RESULT_TXT: ${RESULT_TXT}"
@@ -44,6 +46,7 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
   fi
 
   # ---------- 解析实验标识，如 R1234/v0 ----------
+  # 取 BASE_DIR 的倒数第 2、1 级目录名
   parent_dir="$(basename "$(dirname "${BASE_DIR}")")"   # output_step_reason_4K6_R1234
   version_dir="$(basename "${BASE_DIR}")"                # v0-20260110-185215
 
@@ -55,15 +58,20 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
 
   # 最终前缀
   exp_prefix="${run_tag}/${version_tag}"
+
   echo "Experiment tag: ${exp_prefix}"
 
   # ================== 收集并排序 checkpoint ==================
+  # 找出 checkpoint-数字 形式的目录
+  # 按数字大小排序，保证顺序：2800 -> 3000 -> 3200 ...
   mapfile -t CKPTS < <(
     find "${BASE_DIR}" -maxdepth 1 -type d -name "checkpoint-[0-9]*" -printf "%f\n" \
     | sed -E 's/^checkpoint-([0-9]+)$/\1 checkpoint-\1/' \
     | sort -n -k1,1 \
-    | awk '{print $2}'
+    | awk '{print $2}' \
+    | tail -n 5
   )
+
 
   # 如果当前 BASE_DIR 下没有 checkpoint，就跳过
   if [[ ${#CKPTS[@]} -eq 0 ]]; then
@@ -73,11 +81,17 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
 
   # ================== 内层：逐个 checkpoint 处理 ==================
   for ckpt in "${CKPTS[@]}"; do
+    # 提取 step 数字，如 checkpoint-2800 -> 2800
     step="${ckpt#checkpoint-}"
 
+    # LoRA 目录
     lora_dir="${BASE_DIR}/${ckpt}"
+
+    # merge 后模型目录（swift export 自动生成）
     merged_dir="${BASE_DIR}/${ckpt}-merged"
-    jsonl_file="${BASE_DIR}/${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
+
+    # 推理输出的 jsonl 文件名
+    jsonl_file="${OUTPUT_JSONL}/${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
 
     echo "============================================================"
     echo "[EXP ] ${exp_prefix}"
@@ -87,11 +101,13 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
     echo "[JSON] ${jsonl_file}"
 
     # ---------- 1) 合并 LoRA ----------
+    # swift export 会在 LoRA 同级目录生成 checkpoint-XXXX-merged
     if [[ -d "${merged_dir}" ]]; then
       echo "[STEP ${step}] 已存在 merged 目录，跳过 merge"
     else
       echo "[STEP ${step}] 开始 merge LoRA..."
       (
+        # 切到 BASE_DIR，确保 merged 输出在同级目录
         cd "${BASE_DIR}"
         ${SWIFT_CMD} export \
           --adapters "${lora_dir}" \
@@ -99,32 +115,37 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
       )
     fi
 
+    # merge 后目录必须存在
     if [[ ! -d "${merged_dir}" ]]; then
       echo "[STEP ${step}] ERROR: merge 失败，未找到 ${merged_dir}"
       exit 1
     fi
 
     # ---------- 2) 推理 ----------
+    # 使用合并后的模型做推理，生成 jsonl
     echo "[STEP ${step}] 开始推理..."
-    ${INFER_PY} --model_path "${merged_dir}"
+    ${INFER_PY} --model_path "${merged_dir}" --output "${jsonl_file}"
 
+    # 检查推理输出是否存在
     if [[ ! -f "${jsonl_file}" ]]; then
       echo "[STEP ${step}] ERROR: 未找到推理输出 ${jsonl_file}"
       exit 1
     fi
 
     # ---------- 3) 评测 ----------
+    # 评测脚本默认输出到 stdout，这里用变量接住
     echo "[STEP ${step}] 开始评测..."
     eval_out="$(${EVAL_PY} --input "${jsonl_file}")"
 
     # ---------- 4) 追加写入结果 ----------
-    # 输出格式：R1234/v0 2800 acc=...
+    # 每一行结果前面加上 exp_prefix + step，方便之后对齐不同实验/版本
     echo "[STEP ${step}] 写入 ${RESULT_TXT}（追加，不覆盖）..."
     while IFS= read -r line; do
       printf "%s %s %s\n" "${exp_prefix}" "${step}" "${line}" >> "${RESULT_TXT}"
     done <<< "${eval_out}"
 
     # ---------- 5) 清理 merged 目录 ----------
+    # 节省磁盘空间，每测完一个就删掉合并后的模型
     echo "[STEP ${step}] 删除 merged 目录: ${merged_dir}"
     rm -rf "${merged_dir}"
 

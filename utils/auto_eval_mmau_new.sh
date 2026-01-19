@@ -11,19 +11,21 @@ BASE_DIRS=(
   "/mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R12_simple/v7-20260115-024725"
 )
 
+OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/result"
+
 # ================== 通用配置 ==================
 # 推理脚本 & 评测脚本（按你的实际路径修改）
 INFER_PY="python infer_mmau_new_batch.py"
 EVAL_PY="./eval/mmau_eval_CoT.py"
 
 # 评测结果统一追加到这个文件（不会覆盖）
-RESULT_TXT="./result_mmau_new.txt"
+RESULT_TXT="/mnt/hdfs/if_au/saves/mrx/result/result_mmau_new.txt"
 
 # swift 命令（如果 swift 不在 PATH，请写绝对路径）
 SWIFT_CMD="swift"
 
 # infer 脚本生成的 jsonl 文件命名规则
-JSONL_PREFIX="mmau_new_step_review_4K6-3e-sft-RL-"
+JSONL_PREFIX="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX="_1.02.jsonl"
 
 echo "RESULT_TXT: ${RESULT_TXT}"
@@ -60,12 +62,16 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
   echo "Experiment tag: ${exp_prefix}"
 
   # ================== 收集并排序 checkpoint ==================
+  # 找出 checkpoint-数字 形式的目录
+  # 按数字大小排序，保证顺序：2800 -> 3000 -> 3200 ...
   mapfile -t CKPTS < <(
     find "${BASE_DIR}" -maxdepth 1 -type d -name "checkpoint-[0-9]*" -printf "%f\n" \
     | sed -E 's/^checkpoint-([0-9]+)$/\1 checkpoint-\1/' \
     | sort -n -k1,1 \
-    | awk '{print $2}'
+    | awk '{print $2}' \
+    | tail -n 5
   )
+
 
   # 如果当前 BASE_DIR 下没有 checkpoint，就跳过
   if [[ ${#CKPTS[@]} -eq 0 ]]; then
@@ -85,7 +91,8 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
     merged_dir="${BASE_DIR}/${ckpt}-merged"
 
     # 推理输出的 jsonl 文件名
-    jsonl_file="${BASE_DIR}/${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
+    safe_prefix="${exp_prefix//\//_}"   # 把 R1234/v0 里的 / 替换成 _
+    jsonl_file="${OUTPUT_JSONL}/${safe_prefix}_${JSONL_PREFIX}${step}${JSONL_SUFFIX}"
 
     echo "============================================================"
     echo "[EXP ] ${exp_prefix}"
@@ -118,7 +125,7 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
     # ---------- 2) 推理 ----------
     # 使用合并后的模型做推理，生成 jsonl
     echo "[STEP ${step}] 开始推理..."
-    ${INFER_PY} --model_path "${merged_dir}"
+    ${INFER_PY} --model_path "${merged_dir}" --output "${jsonl_file}"
 
     # 检查推理输出是否存在
     if [[ ! -f "${jsonl_file}" ]]; then
@@ -132,7 +139,7 @@ for BASE_DIR in "${BASE_DIRS[@]}"; do
     eval_out="$(${EVAL_PY} --input "${jsonl_file}")"
 
     # ---------- 4) 追加写入结果 ----------
-    # 输出格式：R1234/v0 2800 acc=...
+    # 每一行结果前面加上 exp_prefix + step，方便之后对齐不同实验/版本
     echo "[STEP ${step}] 写入 ${RESULT_TXT}（追加，不覆盖）..."
     while IFS= read -r line; do
       printf "%s %s %s\n" "${exp_prefix}" "${step}" "${line}" >> "${RESULT_TXT}"

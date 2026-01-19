@@ -9,20 +9,6 @@ import librosa
 from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 from qwen_omni_utils import process_mm_info
 
-# ----------------------------
-# Configuration
-# ----------------------------
-args = parse_args()
-model_path = args.model_path
-tag = build_tag_from_model_path(model_path)
-
-input_file = "./data/MMAR.json"
-output_file = f"./mmar_{tag}.jsonl"
-
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
-batch_size = 16
-sys_prompt = "You are a helpful assistant."
 
 
 # ----------------------------
@@ -36,7 +22,14 @@ def parse_args():
         required=True,
         help="Path to checkpoint-XXXX-merged directory"
     )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output jsonl file path. If not set, use default path based on model step."
+    )
     return parser.parse_args()
+
 
 
 def build_tag_from_model_path(model_path: str) -> str:
@@ -52,6 +45,22 @@ def build_tag_from_model_path(model_path: str) -> str:
     step = match.group(1)
     tag = f"step_review_4K6-3e-sft-RL-{step}_1.03"
     return tag
+
+
+# ----------------------------
+# Configuration
+# ----------------------------
+args = parse_args()
+model_path = args.model_path
+tag = build_tag_from_model_path(model_path)
+
+input_file = "./data/MMAR.json"
+output_file = args.output
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+batch_size = 16
+sys_prompt = "You are a helpful assistant."
+
 
 
 def main():

@@ -9,24 +9,6 @@ import librosa  # noqa: F401
 from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 from qwen_omni_utils import process_mm_info
 
-# ----------------------------
-# Configuration
-# ----------------------------
-args = parse_args()
-model_path = args.model_path
-
-# Keep this in sync with generate() so tag matches run setting
-REPETITION_PENALTY = 1.02
-tag = build_tag_from_model_path(model_path, repetition_penalty=REPETITION_PENALTY)
-
-input_file = "./data/MMAU_old.json"
-output_file = f"./mmau_old_{tag}.jsonl"
-
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
-batch_size = 16
-sys_prompt = "You are a helpful assistant."
-
 
 # ----------------------------
 # CLI
@@ -38,6 +20,12 @@ def parse_args():
         type=str,
         required=True,
         help="Path to checkpoint-XXXX-merged directory"
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output jsonl file path. If not set, use default path based on model step."
     )
     return parser.parse_args()
 
@@ -82,6 +70,26 @@ def load_processed_ids(output_path: str) -> set:
     if bad_lines > 0:
         print(f"Warning: skipped {bad_lines} malformed lines in output JSONL.")
     return processed
+
+
+# ----------------------------
+# Configuration
+# ----------------------------
+args = parse_args()
+model_path = args.model_path
+
+# Keep this in sync with generate() so tag matches run setting
+REPETITION_PENALTY = 1.02
+tag = build_tag_from_model_path(model_path, repetition_penalty=REPETITION_PENALTY)
+
+input_file = "./data/MMAU_old.json"
+output_file = args.output
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+batch_size = 16
+sys_prompt = "You are a helpful assistant."
+
 
 
 def main():
