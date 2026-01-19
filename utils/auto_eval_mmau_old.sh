@@ -90,16 +90,11 @@ run_one_dir () {
     echo "[MERG] ${merged_dir}"
     echo "[JSON] ${jsonl_file}"
 
-    # ---------- 1) 合并 LoRA ----------
-    if [[ -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] 已存在 merged 目录（${merged_dir}），跳过 merge"
 
-      # ★ 改动2：用 --output_dir 指定导出目录
-      ${SWIFT_CMD} export \
+    ${SWIFT_CMD} export \
         --adapters "${lora_dir}" \
         --merge_lora true \
         --output_dir "${merged_dir}"
-    fi
 
     # 校验：目录存在且非空
     if [[ ! -d "${merged_dir}" ]] || [[ -z "$(ls -A "${merged_dir}" 2>/dev/null)" ]]; then

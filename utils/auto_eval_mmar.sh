@@ -81,16 +81,11 @@ run_one_dir () {
     echo "[MERG] ${merged_dir}"
     echo "[JSON] ${jsonl_file}"
 
-    if [[ -d "${merged_dir}" ]]; then
-      echo "[STEP ${step}] merged 已存在（${merged_dir}），跳过 merge"
-
-      # ★ 关键改动：用 --output_dir 指定导出目录
-      # 注意：不再依赖 BASE_DIR 里自动生成的 checkpoint-xxx-merged
-      ${SWIFT_CMD} export \
+    ${SWIFT_CMD} export \
         --adapters "${lora_dir}" \
         --merge_lora true \
         --output_dir "${merged_dir}"
-    fi
+    
 
     # 简单校验（至少得有东西）
     if [[ ! -d "${merged_dir}" ]] || [[ -z "$(ls -A "${merged_dir}" 2>/dev/null)" ]]; then
