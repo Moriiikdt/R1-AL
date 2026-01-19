@@ -85,7 +85,6 @@ run_one_dir () {
         --adapters "${lora_dir}" \
         --merge_lora true \
         --output_dir "${merged_dir}"
-    
 
     # 简单校验（至少得有东西）
     if [[ ! -d "${merged_dir}" ]] || [[ -z "$(ls -A "${merged_dir}" 2>/dev/null)" ]]; then
