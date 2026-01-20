@@ -19,7 +19,6 @@ EVAL_PY="python ./eval/mmau_eval_CoT.py"
 RESULT_TXT="/mnt/hdfs/if_au/saves/mrx/result/result_mmau_new.txt"
 SWIFT_CMD="swift"
 
-JSONL_PREFIX="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX="_1.02.jsonl"
 
 # ★ 新增：统一 merged 输出根目录

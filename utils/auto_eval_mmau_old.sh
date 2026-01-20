@@ -16,7 +16,7 @@ EVAL_PY="python ./eval/mmau_eval_CoT.py"
 RESULT_TXT="/mnt/hdfs/if_au/saves/mrx/result/result_mmau_old.txt"
 SWIFT_CMD="swift"
 
-JSONL_PREFIX="mmar_step_review_4K6-3e-sft-RL-"
+JSONL_PREFIX="mmau_old_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX="_1.02.jsonl"
 
 LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_mmau_old"
