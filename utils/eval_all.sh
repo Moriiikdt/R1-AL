@@ -38,7 +38,7 @@ RESULT_MMAU_OLD_TXT="/mnt/hdfs/if_au/saves/mrx/results/result_mmau_old.txt"
 JSONL_PREFIX_MMAU_OLD="mmau_old_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX_MMAU_OLD="_1.02.jsonl"
 
-touch "${RESULT_MMAR_TXT}" "${RESULT_MMAU_NEW_TXT}" "${RESULT_MMAU_OLD_TXT}"
+# touch "${RESULT_MMAR_TXT}" "${RESULT_MMAU_NEW_TXT}" "${RESULT_MMAU_OLD_TXT}"
 
 LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_all3"
 mkdir -p "${LOG_DIR}"
