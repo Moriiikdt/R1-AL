@@ -9,8 +9,8 @@ BASE_DIRS=(
   "/mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R12_simple/v7-20260115-024725"
 )
 
-OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/result"
-MERGED_ROOT="/opt/tiger/hqz_debug/mrx/R1-AL/utils/merged"
+OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/results/jsonl"
+MERGED_ROOT="/opt/tiger/hqz_debug/mrx/R1-AL/utils/mergeds"
 SWIFT_CMD="swift"
 
 mkdir -p "${OUTPUT_JSONL}" "${MERGED_ROOT}"
@@ -40,7 +40,7 @@ JSONL_SUFFIX_MMAU_OLD="_1.02.jsonl"
 
 # touch "${RESULT_MMAR_TXT}" "${RESULT_MMAU_NEW_TXT}" "${RESULT_MMAU_OLD_TXT}"
 
-LOG_DIR="/mnt/hdfs/if_au/saves/mrx/result/logs_all3"
+LOG_DIR="/mnt/hdfs/if_au/saves/mrx/results/logs_all3"
 mkdir -p "${LOG_DIR}"
 
 run_benchmark () {
