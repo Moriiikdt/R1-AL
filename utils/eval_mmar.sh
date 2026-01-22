@@ -12,12 +12,12 @@ mkdir -p "${OUTPUT_JSONL}" "${MERGED_ROOT}"
 
 # ================== 只保留 MMAR 配置 ==================
 INFER_MMAR="python infer_mmar_batch.py"
-EVAL_MMAR="python ./eval/mmar_eval_CoT.py --input "
+EVAL_MMAR="python ./eval/mmar_eval_CoT.py"   
 RESULT_MMAR_TXT="/mnt/hdfs/if_au/saves/mrx/results/result_mmar.txt"
 JSONL_PREFIX_MMAR="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX_MMAR="_1.03.jsonl"
 
-LOG_DIR="/mnt/hdfs/if_au/saves/mrx/results/logs_1dir_last17_take12_mmar"
+LOG_DIR="/mnt/hdfs/if_au/saves/mrx/results/logs_mmar_780_900_step20"
 mkdir -p "${LOG_DIR}"
 
 run_mmar () {
@@ -49,11 +49,25 @@ run_mmar () {
 
 run_one_ckpt () {
   local BASE_DIR="$1"
-  local ckpt="$2"     # e.g. checkpoint-12345
+  local step="$2"     # numeric step e.g. 780
   local GPU_ID="$3"
 
   export CUDA_VISIBLE_DEVICES="${GPU_ID}"
   export OMP_NUM_THREADS=8
+
+  local ckpt="checkpoint-${step}"
+  local lora_dir="${BASE_DIR}/${ckpt}"
+
+  # ★ 空目录/不存在：跳过（不让整批挂）
+  if [[ ! -d "${lora_dir}" ]]; then
+    echo "[GPU ${GPU_ID}][STEP ${step}] WARNING: not found, skip: ${lora_dir}"
+    return 0
+  fi
+  if [[ -z "$(ls -A "${lora_dir}" 2>/dev/null)" ]]; then
+    echo "[GPU ${GPU_ID}][STEP ${step}] WARNING: empty dir, skip: ${lora_dir}"
+    return 0
+  fi
+  # 如果你希望“空目录直接失败”，把上面两段 WARNING 改成 exit 1 即可。
 
   local parent_dir version_dir run_tag version_tag exp_prefix
   parent_dir="$(basename "$(dirname "${BASE_DIR}")")"
@@ -63,10 +77,7 @@ run_one_ckpt () {
   version_tag="$(echo "${version_dir}" | sed -E 's/^(v[0-9]+).*/\1/')"
   exp_prefix="${run_tag}/${version_tag}"
 
-  local step lora_dir merged_dir safe_prefix
-  step="${ckpt#checkpoint-}"
-  lora_dir="${BASE_DIR}/${ckpt}"
-
+  local merged_dir safe_prefix
   merged_dir="${MERGED_ROOT}/checkpoint_${run_tag}_${version_tag}_${step}"
   safe_prefix="${exp_prefix//\//_}"
 
@@ -77,7 +88,6 @@ run_one_ckpt () {
   echo "============================================================"
   echo "[GPU ] ${GPU_ID}"
   echo "[EXP ] ${exp_prefix}"
-  echo "[CKPT] ${ckpt}"
   echo "[STEP] ${step}"
   echo "[LoRA] ${lora_dir}"
   echo "[MERG] ${merged_dir}"
@@ -95,7 +105,6 @@ run_one_ckpt () {
     exit 1
   fi
 
-  # 只跑 MMAR
   run_mmar "${jsonl_mmar}" "${exp_prefix}" "${step}" "${merged_dir}"
 
   echo "[STEP ${step}] 删除 merged 目录: ${merged_dir}"
@@ -104,36 +113,20 @@ run_one_ckpt () {
   echo "[STEP ${step}] 完成"
 }
 
-# ================== 主流程：选 CKPT（倒数17到倒数6，共12个） ==================
+# ================== 主流程：固定 steps 780..900 间隔 20 ==================
 if [[ ! -d "${BASE_DIR}" ]]; then
   echo "ERROR: BASE_DIR not found: ${BASE_DIR}"
   exit 1
 fi
 
-mapfile -t ALL_CKPTS < <(
-  find "${BASE_DIR}" -maxdepth 1 -type d -name "checkpoint-[0-9]*" -printf "%f\n" \
-  | sed -E 's/^checkpoint-([0-9]+)$/\1 checkpoint-\1/' \
-  | sort -n -k1,1 \
-  | awk '{print $2}'
-)
+STEPS=(780 800 820 840 860 880 900)
+echo "将要测试的 steps：${STEPS[*]}"
 
-n="${#ALL_CKPTS[@]}"
-if (( n < 17 )); then
-  echo "ERROR: checkpoint 数量不足 17 个（当前 ${n} 个），无法取倒数第17~倒数第6。"
-  exit 1
-fi
-
-# 取倒数 17 个里，去掉最新 5 个 => 共 12 个（倒数第17~倒数第6）
-mapfile -t CKPTS < <(printf "%s\n" "${ALL_CKPTS[@]}" | tail -n 17 | head -n 12)
-
-echo "将要测试的 12 个 checkpoints（倒数第17~倒数第6）："
-printf "  %s\n" "${CKPTS[@]}"
-
-# ================== 4 卡分 batch：每个 batch 4 个 ckpt ==================
+# ================== 4 卡分 batch：每个 batch 最多 4 个 step ==================
 fail=0
 batch_id=0
 
-for ((offset=0; offset<${#CKPTS[@]}; offset+=4)); do
+for ((offset=0; offset<${#STEPS[@]}; offset+=4)); do
   batch_id=$((batch_id+1))
   echo
   echo "##########################"
@@ -144,16 +137,16 @@ for ((offset=0; offset<${#CKPTS[@]}; offset+=4)); do
 
   for gpu in 0 1 2 3; do
     idx=$((offset+gpu))
-    if (( idx >= ${#CKPTS[@]} )); then
+    if (( idx >= ${#STEPS[@]} )); then
       continue
     fi
 
-    ckpt="${CKPTS[$idx]}"
-    log="${LOG_DIR}/batch${batch_id}_gpu${gpu}_${ckpt}.log"
+    step="${STEPS[$idx]}"
+    log="${LOG_DIR}/batch${batch_id}_gpu${gpu}_step${step}.log"
 
-    run_one_ckpt "${BASE_DIR}" "${ckpt}" "${gpu}" > "${log}" 2>&1 &
+    run_one_ckpt "${BASE_DIR}" "${step}" "${gpu}" > "${log}" 2>&1 &
     pids+=("$!")
-    echo "Launched batch${batch_id} GPU ${gpu} for ${ckpt} (pid=${pids[-1]}), log=${log}"
+    echo "Launched batch${batch_id} GPU ${gpu} for step=${step} (pid=${pids[-1]}), log=${log}"
   done
 
   for pid in "${pids[@]}"; do
@@ -171,7 +164,7 @@ for ((offset=0; offset<${#CKPTS[@]}; offset+=4)); do
 done
 
 echo
-echo "全部 12 个 checkpoint MMAR 测试完成 ✅"
+echo "全部 steps MMAR 测试完成 ✅"
 echo "结果汇总文件："
 echo "  - ${RESULT_MMAR_TXT}"
 echo "日志目录：${LOG_DIR}"
