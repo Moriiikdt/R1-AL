@@ -15,14 +15,14 @@ swift rlhf \
     --external_plugins "/opt/tiger/hqz_debug/mrx/R1-AL/examples/train/grpo/plugin/plugin.py" \
     --max_completion_length 2048 \
     --num_train_epochs 1 \
-    --max_steps 3000 \
+    --max_steps 2000 \
     --per_device_train_batch_size 16 \
-    --per_device_eval_batch_size 16 \
+    --per_device_eval_batch_size 8 \
     --learning_rate 1e-5 \
     --gradient_accumulation_steps 1 \
     --eval_steps 100 \
     --save_steps 100 \
-    --save_total_limit 20 \
+    --save_total_limit 10 \
     --logging_steps 5 \
     --max_length 2048 \
     --output_dir /mnt/hdfs/if_au/data/avqa_reason/RL_46544/output_step_reason_4K6_R1234 \
@@ -35,4 +35,5 @@ swift rlhf \
     --top_k 50 \
     --system '/opt/tiger/hqz_debug/mrx/R1-AL/examples/train/grpo/prompt.txt' \
     --deepspeed zero2 \
-    --log_completions true
+    --log_completions true \
+    --resume_from_checkpoint /mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R1234/v0-20260110-185215/checkpoint-1000
