@@ -25,7 +25,7 @@ swift rlhf \
     --save_total_limit 10 \
     --logging_steps 5 \
     --max_length 2048 \
-    --output_dir /mnt/hdfs/if_au/data/avqa_reason/RL_46544/output_step_reason_4K6_R1234 \
+    --output_dir /mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R1234 \
     --warmup_ratio 0.05 \
     --dataloader_num_workers 4 \
     --dataset_num_proc 4 \

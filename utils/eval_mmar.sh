@@ -4,7 +4,7 @@ set -euo pipefail
 # =============== 只跑这一个目录 ===============
 BASE_DIR="/mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R1234/v0-20260110-185215"
 
-OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/results/jsonl_mmar"
+OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/results/jsonl_mmar_continue"
 MERGED_ROOT="/opt/tiger/hqz_debug/mrx/R1-AL/utils/mergeds"
 SWIFT_CMD="swift"
 
@@ -12,12 +12,12 @@ mkdir -p "${OUTPUT_JSONL}" "${MERGED_ROOT}"
 
 # ================== 只保留 MMAR 配置 ==================
 INFER_MMAR="python infer_mmar_batch.py"
-EVAL_MMAR="python ./eval/mmar_eval_CoT.py"   
+EVAL_MMAR="python ./eval/mmar_eval_CoT.py"
 RESULT_MMAR_TXT="/mnt/hdfs/if_au/saves/mrx/results/result_mmar.txt"
 JSONL_PREFIX_MMAR="mmar_step_review_4K6-3e-sft-RL-"
 JSONL_SUFFIX_MMAR="_1.03.jsonl"
 
-LOG_DIR="/mnt/hdfs/if_au/saves/mrx/results/logs_mmar_780_900_step20"
+LOG_DIR="/mnt/hdfs/if_au/saves/mrx/results/logs_mmar_1100_2000_step100"
 mkdir -p "${LOG_DIR}"
 
 run_mmar () {
@@ -49,7 +49,7 @@ run_mmar () {
 
 run_one_ckpt () {
   local BASE_DIR="$1"
-  local step="$2"     # numeric step e.g. 780
+  local step="$2"     # numeric step e.g. 1100
   local GPU_ID="$3"
 
   export CUDA_VISIBLE_DEVICES="${GPU_ID}"
@@ -67,7 +67,6 @@ run_one_ckpt () {
     echo "[GPU ${GPU_ID}][STEP ${step}] WARNING: empty dir, skip: ${lora_dir}"
     return 0
   fi
-  # 如果你希望“空目录直接失败”，把上面两段 WARNING 改成 exit 1 即可。
 
   local parent_dir version_dir run_tag version_tag exp_prefix
   parent_dir="$(basename "$(dirname "${BASE_DIR}")")"
@@ -113,13 +112,13 @@ run_one_ckpt () {
   echo "[STEP ${step}] 完成"
 }
 
-# ================== 主流程：固定 steps 780..900 间隔 20 ==================
+# ================== 主流程：固定 steps 1100..2000 间隔 100 ==================
 if [[ ! -d "${BASE_DIR}" ]]; then
   echo "ERROR: BASE_DIR not found: ${BASE_DIR}"
   exit 1
 fi
 
-STEPS=(780 800 820 840 860 880 900)
+STEPS=(1100 1200 1300 1400 1500 1600 1700 1800 1900 2000)
 echo "将要测试的 steps：${STEPS[*]}"
 
 # ================== 4 卡分 batch：每个 batch 最多 4 个 step ==================
