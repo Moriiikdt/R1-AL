@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-LOG_DIR = Path("/mnt/hdfs/if_au/saves/mrx/results/jsonl/_eval_logs")
+LOG_DIR = Path("/mnt/hdfs/if_au/saves/mrx/results/jsonl_mmar/_eval_logs_mmar")
 MIN_TOTAL = 1000
 
 # regex patterns

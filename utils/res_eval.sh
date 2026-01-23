@@ -2,8 +2,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/mnt/hdfs/if_au/saves/mrx/results/jsonl"
-LOG_DIR="${ROOT}/_eval_logs"
+ROOT="/mnt/hdfs/if_au/saves/mrx/results/jsonl_mmar"
+LOG_DIR="${ROOT}/_eval_logs_mmar"
 mkdir -p "${LOG_DIR}"
 
 MMAR_SCRIPT="./eval/mmar_eval_CoT.py"
