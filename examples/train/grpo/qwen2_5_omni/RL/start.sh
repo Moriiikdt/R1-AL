@@ -15,8 +15,7 @@ nohup bash vllm_stress.sh &
 nohup bash vllm_stress.sh &
 
 echo ">>> 启动 grpo_R1234 训练 ..."
-nohup bash grpo_R1234.sh >> "$LOG_DIR/train1234_continue.log" 2>&1
-echo ">>> grpo_R1234 训练完成"
+bash grpo_R1234.sh
 
 # echo ">>> 启动 grpo_R12_simple 训练 ..."
 # nohup bash grpo_R12_simple.sh >> "$LOG_DIR/train12_simple.log" 2>&1
