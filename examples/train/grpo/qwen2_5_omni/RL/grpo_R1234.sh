@@ -36,4 +36,5 @@ swift rlhf \
     --system '/opt/tiger/hqz_debug/mrx/R1-AL/examples/train/grpo/prompt.txt' \
     --deepspeed zero2 \
     --log_completions true \
+    --report_to none \
     --resume_from_checkpoint /mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R1234/v0-20260110-185215/checkpoint-1000
