@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # =============== 只跑这一个目录 ===============
-BASE_DIR="/mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R1234/v0-20260110-185215"
+BASE_DIR="/mnt/hdfs/if_au/saves/mrx/checkpoints/output_step_reason_4K6_R1234/v7-20260126-082836"
 
-OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/results/jsonl_mmar_continue"
+OUTPUT_JSONL="/mnt/hdfs/if_au/saves/mrx/results/jsonl_mmar_continue_11-20"
 MERGED_ROOT="/opt/tiger/hqz_debug/mrx/R1-AL/utils/mergeds"
 SWIFT_CMD="swift"
 
